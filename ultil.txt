@@ -1,0 +1,586 @@
+package common
+import java.nio.charset.StandardCharsets
+import java.text.DateFormat
+import java.text.DecimalFormat
+import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeFormatterBuilder
+import java.time.temporal.ChronoField
+import java.util.regex.Pattern
+import java.math.RoundingMode
+
+import org.apache.commons.collections.CollectionUtils
+import org.apache.commons.collections4.map.HashedMap
+
+import static org.apache.commons.lang.StringUtils.EMPTY as EMPTY_STRING
+import org.apache.commons.lang3.BooleanUtils
+import org.apache.commons.lang3.StringUtils
+
+import com.fpt.devops.constants.TestCaseConstants
+import com.fpt.devops.objects.SuiteTestCase
+import com.fpt.devops.objects.TestPoint
+import com.fpt.devops.objects.TestPointsQuery
+import com.fpt.devops.objects.WorkItem
+import com.kms.katalon.core.annotation.Keyword
+import com.kms.katalon.core.configuration.RunConfiguration
+import com.kms.katalon.core.testdata.TestData
+import com.kms.katalon.core.testobject.RequestObject
+import com.kms.katalon.core.testobject.ResponseObject
+import com.kms.katalon.core.testobject.TestObjectProperty
+import com.kms.katalon.core.webui.driver.DriverFactory
+
+import internal.GlobalVariable
+import static com.kms.katalon.core.testobject.ObjectRepository.findTestObject
+import com.kms.katalon.core.webservice.keyword.WSBuiltInKeywords as WS
+
+import static common.Constants.DATA_API_DATETIME_FORMAT as DATA_API_DATETIME_FORMAT
+import static common.Constants.FULL_DATETIME_FORMAT as FULL_DATETIME_FORMAT
+import static common.Constants.SHORT_FORMAT_DATE as SHORT_FORMAT_DATE
+import static common.Constants.PATTERN_GET_VALUE_INSIDE_BRACKETS as PATTERN_GET_VALUE_INSIDE_BRACKETS
+import static common.Constants.PATTERN_SQUARE_BRACKETS_BOUND as PATTERN_SQUARE_BRACKETS_BOUND
+import static common.Constants.PATTERN_GET_AUTHORIZATION_CODE as PATTERN_GET_AUTHORIZATION_CODE
+import static common.Constants.FULL_DATETIME_FORMAT_WITHOUT_S as FULL_DATETIME_FORMAT_WITHOUT_S
+import org.testng.Assert as Assert
+import common.MySqlServer as MySqlServer
+import groovy.json.JsonSlurper
+
+
+public class utils {
+	public static List<Integer> testCaseIdsList = null;
+	public static List<String> scenariosList = new ArrayList<String>();
+
+	@Keyword
+	def static String getRandomNumber() {
+		/*
+		 * Generate random number
+		 */
+		String randomNum
+		def date = new Date()
+		def sdf = new SimpleDateFormat("MMddyyyy_HHmmss")
+		randomNum = sdf.format(date)
+		return randomNum;
+	}
+
+	@Keyword
+	void addGlobalVariable(String name, def value) {
+		GroovyShell shell1 = new GroovyShell()
+		MetaClass mc = shell1.evaluate("internal.GlobalVariable").metaClass
+		String getterName = "get" + name.capitalize()
+		mc.'static'."$getterName" = {
+			-> return value
+		}
+		mc.'static'."$name" = value
+	}
+
+	@Keyword
+	def static String getBrowserName(){
+		Map map = RunConfiguration.getExecutionProperties()
+		String driverName = null
+		if (map.get('drivers').get('system').containsKey('Remote')) {
+			// In case remote webdriver
+			driverName = map.get('drivers').get('preferences').get('Remote').get('browserName').toUpperCase()
+		} else {
+			// in case local webdriver
+			driverName = DriverFactory.getExecutedBrowser().getName()
+		}
+
+		switch (driverName.toUpperCase()) {
+			// Chrome driver
+			case "CHROME":
+			case "CHROME_DRIVER":
+				return "CHROME"
+
+			// IE driver
+			case "INTERNET EXPLORER":
+			case "IE_DRIVER":
+				return "IE"
+
+			// Firefox driver
+			case "FIREFOX":
+			case "FIREFOX_DRIVER":
+				return "FIREFOX"
+			default:
+				throw new Exception("Browser name " + driverName + " is not valid")
+		}
+	}
+
+	@Keyword
+	def static String generateFileNameWithCurrentTimeSuffix(String name) {
+		// Create an instance of SimpleDateFormat used for formatting
+		// the string representation of date according to the chosen pattern
+		DateFormat df = new SimpleDateFormat("MMddyyyy_HHmmss");
+
+		// Get the today date using Calendar object.
+		Date today = Calendar.getInstance().getTime();
+
+		// Using DateFormat format method we can create a string
+		// representation of a date with the defined format.
+		String todayAsString = df.format(today);
+
+		Pattern p = Pattern.compile('[:"+/]', Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
+
+		return p.matcher(name).replaceAll('-') + '_' + todayAsString + ".png"
+	}
+
+	@Keyword
+	public static Map<String, String> getTimeRange(String from, String to) {
+		Map<String, String> range = new HashMap();
+
+		DateTimeFormatter formater = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+		LocalDateTime now = LocalDateTime.now();
+
+		if (from.equals("")) from = formater.format(now.plusDays(-14))
+		if (to.equals("")) to = formater.format(now.plusDays(1))
+
+		range["from"] = from;
+		range["to"] = to;
+
+		return range
+	}
+
+	@Keyword
+	public static String getAuthorizationCode(String userRole) {
+		switch (userRole){
+			case '${GNE-CODE}':
+				return GlobalVariable.HSSE_GNE_COP_CODE;
+			case '${GNE-SCPD-CODE}':
+				return GlobalVariable.HSSE_GNE_SCPD_CODE;
+			case '${GNE-SCEM-CODE}':
+				return GlobalVariable.HSSE_GNE_SCEM_CODE;
+			case '${GNE-GHGPU-CODE}':
+				return GlobalVariable.HSSE_GNE_GHGPU_CODE;
+			case '${GNE-CP-CODE}':
+				return GlobalVariable.HSSE_GNE_CP_CODE;
+			case '${GNE-HWH-CODE}':
+				return GlobalVariable.HSSE_GNE_HWH_CODE;
+			case '${GNE-SCEM-CODE}':
+				return GlobalVariable.HSSE_GNE_SCEM_CODE;
+			case '${GNE-SCENC-CODE}':
+				return GlobalVariable.HSSE_GNE_SCENC_CODE;
+			case '${GNE-OPEN-CODE}':
+				return GlobalVariable.HSSE_GNE_OPEN_CODE;
+			case '${GNE-OVER-CODE}':
+				return GlobalVariable.HSSE_GNE_OVER_CODE;
+			case '${GNP-VPS-CODE}':
+				return GlobalVariable.GNP_VPS_CODE;
+			case '${GNP-OAC-CODE}':
+				return GlobalVariable.GNP_OAC_CODE;
+			case '${GNP-UFU-CODE}':
+				return GlobalVariable.GNP_UFU_CODE;
+			case '${GNP-UFRT-CODE}':
+				return GlobalVariable.GNP_UFRT_CODE;
+			case '${GNP-UFGP-CODE}':
+				return GlobalVariable.GNP_UFGP_CODE;
+			case '${GNP-UCAPEX-CODE}':
+				return GlobalVariable.GNP_UCAPEX_CODE;
+			case '${GNP-UCC-CODE}':
+				return GlobalVariable.GNP_UCC_CODE;
+			case '${GNP-SDYTD-CODE}':
+				return GlobalVariable.GNP_SDYTD_CODE;
+			case '${GNP-BK-CODE}':
+				return GlobalVariable.GNP_BUNKER_CODE;
+			case '${GNP-OF-CODE}':
+				return GlobalVariable.GNP_OF_CODE;
+			case '${GNP-OEEFGP-CODE}':
+				return GlobalVariable.GNP_OEEFGP_CODE;
+			case '${GNP-OEEFRG-CODE}':
+				return GlobalVariable.GNP_OEEFRG_CODE;
+			case '${GNP-OEEFU-CODE}':
+				return GlobalVariable.GNP_OEEFU_CODE;
+			case '${GNP-PE-CODE}':
+				return GlobalVariable.GNP_PE_CODE;
+			case '${GNP-PP-CODE}':
+				return GlobalVariable.GNP_PP_CODE;
+			case '${GNP-SDYEP-CODE}':
+				return GlobalVariable.GNP_SDYEP_CODE;
+			default:
+				return userRole
+		}
+	}
+
+	@Keyword
+	def static TestPoint getTestPoint(int planId, int testCaseId, String configurationName) {
+		boolean isTestPlanIncluded = false;
+
+		List<Integer> testCaseIds = Arrays.asList(testCaseId);
+
+		TestPointsQuery query = new TestPointsQuery(testCaseIds);
+		query = ApiObject.webApi.getTestPointApi().getPointsByQuery(query);
+
+		for (TestPoint point : query.getPoints()) {
+			if (point.getTestPlan().getId() == planId) {
+				// Bypass if the latest result of the test point is BLOCKED or NOT APPLICABLE
+				if (point.getOutcome() != TestCaseConstants.BLOCKED && point.getOutcome() != TestCaseConstants.NOT_APPLICABLE) {
+					try {
+						isTestPlanIncluded = true;
+
+						ApiObject.webApi.getTestSuiteApi().getTestSuite(point.getTestPlan().getId(), point.getSuite().getId());
+
+						if (!point.getConfiguration().getName().toUpperCase().equals(configurationName.toUpperCase())) continue;
+					} catch (Exception e) {
+						if (!e.getMessage().contains("404 Not Found")) {
+							throw e;
+						}
+					}
+
+					return point;
+				}
+			}
+		}
+
+		// Check and write test case id to log if test case id is found but not matched configuration
+		if (isTestPlanIncluded) {
+			scenariosList.add(GlobalVariable.NO_CONFIGURATION_MESSAGE.toString()
+					.replace("{id}", testCaseId.toString())
+					.replace("{configuration}", configurationName));
+		}
+
+		return null;
+	}
+
+	@Keyword
+	def static List<Integer> getAutomatedTestCaseIds(int planId, int suiteId) {
+		List<Integer> ids = new ArrayList<Integer>();
+
+		List<SuiteTestCase> suiteTestCases = ApiObject.webApi.getTestCaseApi().getTestCases(planId, suiteId);
+
+		for (SuiteTestCase testCase : suiteTestCases) {
+			WorkItem workItem = ApiObject.webApi.getWorkItemApi().getWorkItem(Integer.parseInt(testCase.getTestCase().getId()));
+
+			if (workItem.getFields().get("Custom.Automation").asString.toUpperCase().equals("AUTOMATED") | workItem.getFields().get("Custom.Automation").asString.toUpperCase().equals("PLANNED")) ids.add(testCase.getTestCase().getId());
+		}
+
+		return ids;
+	}
+
+	@Keyword
+	public static List<String> addPararmaterURL(List<String> paramList, String name, String value) {
+		if(name!= null && value.toUpperCase() != 'NO PARAM') {
+			paramList.add("${name}=${value}")
+		}
+		return paramList;
+	}
+
+	@Keyword
+	def static updateAutomationField(String testCaseId) {
+		def response = WS.sendRequestAndVerify(findTestObject('Object Repository/ADOCommon/Update Automation Field', ['id': testCaseId]))
+		if(response.getStatusCode()!= 200) {
+			println "Update Automation field of test case id : " + testCaseId + ": FAILED";
+		}else {
+			println "Update Automation field of test case id : " + testCaseId + ": PASSED";
+		}
+	}
+
+	@Keyword
+	def static String convertDateTimeWithNano(String value, String oldDateFormat, String newDateFromat) {
+		if (Objects.nonNull(value)) {
+			LocalDateTime ldt1 = LocalDateTime.parse(value, DateTimeFormatter.ofPattern(oldDateFormat));
+			DateTimeFormatter toFormatter = new DateTimeFormatterBuilder()
+					.appendPattern(newDateFromat.replace(".SSS",""))
+					.appendFraction(ChronoField.MILLI_OF_SECOND, 1, 9, true)
+					.toFormatter();
+
+			return  toFormatter.format(ldt1)
+		}
+		return ''
+	}
+
+	@Keyword
+	def static String convertDateTimeFormat(String value, String oldDateFormat, String newDateFromat) {
+		if (Objects.nonNull(value)) {
+			SimpleDateFormat sdf = new SimpleDateFormat(oldDateFormat);
+			SimpleDateFormat output = new SimpleDateFormat(newDateFromat);
+			Date d = sdf.parse(value);
+			return output.format(d);
+		}
+		return ''
+	}
+
+	@Keyword
+	def static String getEmptyStringIfNull(def value) {
+		if (Objects.isNull(value) || String.valueOf(value).equalsIgnoreCase('null')) {
+			value = ''
+		}
+		return value
+	}
+
+	@Keyword
+	def static RequestObject resetAuthorizationToken(RequestObject requestObject, String token) {
+		if ('invalid-code'.equalsIgnoreCase(token) || 'invalid-token'.equalsIgnoreCase(token)|| 'blank'.equalsIgnoreCase(token)) {
+			requestObject.setHttpHeaderProperties(Collections.emptyList())
+		}
+		return requestObject
+	}
+
+	@Keyword
+	def static double getDoubleFromString(def value) {
+		if (Objects.isNull(value)) {
+			return 0
+		}
+		try {
+			return Double.parseDouble(String.valueOf(value))
+		} catch (Exception ex) {
+			return 0
+		}
+	}
+
+	@Keyword
+	def static getDoubleFromStringWithoutFormat(def value) {
+		if (Objects.nonNull(value)) {
+			try {
+				DecimalFormat df = new DecimalFormat("#.##");
+				df.setRoundingMode(RoundingMode.CEILING);
+//				DecimalFormat format = new DecimalFormat();
+//				format.setDecimalSeparatorAlwaysShown(false);
+				def doubleVal =  Double.parseDouble(String.valueOf(value))
+				return df.format(doubleVal)
+			} catch (Exception ex) {
+				return value
+			}
+		}
+	}
+
+	@Keyword
+	def static replaceAllSpaces(String originalString) {
+		return originalString.replaceAll('\\s{1,}', '+')
+	}
+
+	@Keyword
+	def static getBooleanValue(def value) {
+		if (Objects.nonNull(value) && value instanceof Boolean) {
+			return String.valueOf(BooleanUtils.toInteger(value))
+		}
+		return value
+	}
+
+	@Keyword
+	def static reformatData(def value) {
+		if (Objects.nonNull(value)) {
+			if (value instanceof BigDecimal || value instanceof Integer) {
+				return utils.getDoubleFromStringWithoutFormat(value)
+			} else if (value instanceof Boolean) {
+				return utils.getBooleanValue(value)
+			}
+			return getDoubleFromStringWithoutFormat(value)
+		} else {
+			return utils.getEmptyStringIfNull(value)
+		}
+	}
+
+	@Keyword
+	def static convertDateTime(def dataList, String oldDatetimeFormat, String newDatetimeFormat, String[] params) {
+		for (String param : params) {
+			dataList.collect({
+				it.putAt(param, convertDateTimeWithNano(it.get(param), oldDatetimeFormat, newDatetimeFormat)) })
+		}
+		return dataList
+	}
+
+	@Keyword
+	def static convertDateTimeFormat(def dataList, String oldFormat, String newFormat, String[] params) {
+		for (String param : params) {
+			dataList.collect({
+				it.putAt(param, convertDateTimeFormat(it.get(param), oldFormat, newFormat)) })
+		}
+		return dataList
+	}
+
+	@Keyword
+	def static List<String> addParameters(def testDataListener, int rowIndex, String... params) {
+		List<String> paramsString = new ArrayList<String>()
+		for (String param : params) {
+			addPararmaterURL(paramsString, param, testDataListener.getValue(param, rowIndex))
+		}
+		return paramsString
+	}
+
+	@Keyword
+	def static getRandomOneRecordInDB(TestData testData, int rowIndex, String tableName, String[] paramsName) {
+		String queryGetRandomDataInDB = utils.buildQueryGetRandomRecordDB(testData, rowIndex, tableName, paramsName)
+		def randomData
+		if (StringUtils.isNotBlank(queryGetRandomDataInDB)) {
+			List<Object> randomDataListFromDB = MySqlServer.executeQuery(queryGetRandomDataInDB)
+			randomData = CollectionUtils.isNotEmpty(randomDataListFromDB) ? randomDataListFromDB.get(0) : null
+		}
+		return randomData
+	}
+
+	@Keyword
+	def static String buildQueryGetRandomRecordDB(TestData testDataListener, int rowIndex, String tableName, String... paramsName) {
+		List<String> columnList = new ArrayList<>()
+		boolean isColumnName
+		String valueInCell
+		List<String> valueWithFormat
+		for (String param : paramsName) {
+			valueInCell = testDataListener.getValue(param, rowIndex)
+			isColumnName = valueInCell.matches(PATTERN_SQUARE_BRACKETS_BOUND)
+			if (isColumnName) {
+				valueWithFormat = valueInCell.findAll(PATTERN_GET_VALUE_INSIDE_BRACKETS)
+				columnList.add(valueWithFormat.get(0))
+			}
+		}
+		String columnsJoined = columnList.join(', ')
+		String columnsInWhere = columnList.join(' IS NOT NULL AND ')
+		if (CollectionUtils.isNotEmpty(columnList)) {
+			StringBuilder result = new StringBuilder('SELECT TOP(1) ').append(columnsJoined)
+					.append(" FROM ${tableName} WHERE ")
+					.append(columnsInWhere).append(' IS NOT NULL ORDER BY NEWID(); ')
+			return result.toString()
+		}
+		return EMPTY_STRING
+	}
+
+	@Keyword
+	def static Map<String, String> getMapParamURLAndValue(TestData testDataListener, int rowIndex, String[] paramsAPI, def dataInDB, boolean checkDate = false) {
+		Map<String, String> result = new HashedMap()
+		boolean isBlankDataFromDB = Objects.isNull(dataInDB)
+		String valueInCell
+		List<String> valueByColumnDB
+
+		for (String param : paramsAPI) {
+			valueInCell = testDataListener.getValue(param, rowIndex)
+			if (valueInCell.matches(PATTERN_GET_AUTHORIZATION_CODE)) {
+				result.put(param, getAuthorizationCode(valueInCell))
+			} else if (!isBlankDataFromDB && valueInCell.matches(PATTERN_SQUARE_BRACKETS_BOUND)) {
+				valueByColumnDB = valueInCell.findAll(PATTERN_GET_VALUE_INSIDE_BRACKETS)
+				if (valueByColumnDB.size() == 2 && checkDate == false) {
+					result.put(param,
+							convertDateTimeFormat(dataInDB.get(valueByColumnDB.get(0)), FULL_DATETIME_FORMAT, valueByColumnDB.get(1)))
+				} else if (valueByColumnDB.size() == 2 && checkDate == true) {
+					result.put(param,
+							convertDateTimeFormat(dataInDB.get(valueByColumnDB.get(0)), FULL_DATETIME_FORMAT_WITHOUT_S, valueByColumnDB.get(1)))
+				}else if(valueByColumnDB.size() == 3){
+					result.put(param,
+							convertDateTimeFormat(dataInDB.get(valueByColumnDB.get(0)), valueByColumnDB.get(1), valueByColumnDB.get(2)))
+				}else {
+					result.put(param, dataInDB.get(valueByColumnDB.get(0)))
+				}
+			} else {
+				valueInCell.equalsIgnoreCase('NO PARAM') ? '' : result.put(param, valueInCell)
+			}
+		}
+		return result
+	}
+
+	@Keyword
+	def static List<String> addParametersURL(Map<String, String> mapParamWithData) {
+		List<String> result = new ArrayList<>()
+		String value
+		mapParamWithData.each { entry ->
+			value = URLEncoder.encode(entry.value.trim(), StandardCharsets.UTF_8.toString())
+			result.add("${entry.key}=${value}")
+		}
+		return result
+	}
+
+	@Keyword
+	def static String rebuildSQLQueryGetTestData(String rawSQL, Map<String, String> mapParamWithData) {
+		String[] searchList = new String[mapParamWithData.size()]
+		String[] replacementList = new String[mapParamWithData.size()]
+		mapParamWithData.eachWithIndex { entry, i ->
+			searchList[i] = "[${entry.key}]"
+			replacementList[i] = entry.value
+		}
+		return StringUtils.replaceEach(rawSQL, searchList, replacementList)
+	}
+
+	@Keyword
+	def static List<String> addParametersWithCodeAuthen(def testDataListener, int rowIndex, String... params) {
+		List<String> paramsString = new ArrayList<String>()
+		for (String param : params) {
+			if (param.equalsIgnoreCase('code')) {
+				String code = getAuthorizationCode(testDataListener.getValue('authorization', rowIndex))
+				addPararmaterURL(paramsString, 'code', code)
+			} else {
+				addPararmaterURL(paramsString, param, testDataListener.getValue(param, rowIndex))
+			}
+		}
+		return paramsString
+	}
+
+	@Keyword
+	def static verifyData(List<Object> dataAPI, List<Object> dataDB, String apiName) {
+		if(null == dataAPI) dataAPI = [];
+		Assert.assertEquals(dataAPI.size(), dataDB.size(), "$apiName: Assert dataDB size not equals to dataAPI")
+		int dbObjIndex = 0
+		dataAPI.collect({
+			it.each { entry ->
+				def valueDataAPI = reformatData(entry.value)
+				def currDbObj = dataDB.get(dbObjIndex).get(entry.key)
+				def valueDataDB = reformatData(currDbObj)
+				Assert.assertEquals(valueDataAPI, valueDataDB,
+						"API $apiName - Record index " + (dbObjIndex + 1) + " at $entry.key column data IS NOT MATCHED.")
+			}
+			dbObjIndex++
+		})
+	}
+
+	@Keyword
+	def static convertHalfpartDateTime(def dataList, String[] params, String halfpartDateTime, String format) {
+		
+		for (String param : params) {
+			dataList.collect({
+				it.putAt(param, convertHalfpartDateTime(it.get(param), halfpartDateTime, format)) })
+		}
+		return dataList
+	}
+
+	@Keyword
+	def static convertHalfpartDateTime(String time, String halfpartDateTime, String format) {
+		if(!time.isEmpty()) {
+			SimpleDateFormat sdf = new SimpleDateFormat(halfpartDateTime);
+			SimpleDateFormat output = new SimpleDateFormat(format);
+			Date d = sdf.parse(time);
+			return output.format(d)
+		}else return time;
+	}
+
+	@Keyword
+	def static getAuthorizedToken(String pathToRequest, String preToken) {
+		RequestObject request = findTestObject(pathToRequest);
+		ResponseObject response = WS.sendRequest(request);
+		JsonSlurper slurper = new JsonSlurper();
+		def parseJson = slurper.parseText(response.getResponseText());
+		return preToken + parseJson.access_token;
+	}
+
+	def static String plusDate(String dateValue, String formatDate) {
+		SimpleDateFormat oldDate = new SimpleDateFormat(formatDate);
+		Calendar c = Calendar.getInstance();
+		c.setTime(oldDate.parse(dateValue));
+		c.add(Calendar.DATE, 60);  // number of days to add
+		dateValue = oldDate.format(c.getTime());  // dt is now the new date
+		return dateValue
+	}
+
+	@Keyword
+	def static Map<String, String> plusStratDateToCreatEndDate(TestData testDataListener, int rowIndex, Map<String, String> mapDateStart) {
+		Map<String, String> mapDateEnd = new HashMap<>();
+		String valueInCell
+		if(!mapDateStart.isEmpty())
+			mapDateStart.each { entry ->
+				valueInCell = testDataListener.getValue(entry.key, rowIndex)
+				if(entry.key.toString().equals('enddatadate')) {
+					boolean isBlankDataFromDB = Objects.isNull(entry.value)
+					if(!isBlankDataFromDB && valueInCell.matches(PATTERN_SQUARE_BRACKETS_BOUND) ) {
+						entry.value = plusDate(entry.value, "yyyy-MM-dd")
+					}
+				}
+				mapDateEnd.put(entry.key, entry.value)
+			}
+		return mapDateEnd
+	}
+
+	@Keyword
+	def static String[] convertDeftoList( def mapParamWithData) {
+		String tmp = ''
+		for(String param: mapParamWithData) {
+			tmp += param + ","
+		}
+		scenariosList.add(tmp)
+
+		return scenariosList
+	}
+}

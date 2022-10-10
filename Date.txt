@@ -1,0 +1,106 @@
+package common
+
+import java.nio.charset.StandardCharsets
+import java.text.DateFormat
+import java.text.DecimalFormat
+import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeFormatterBuilder
+import java.time.temporal.ChronoField
+import java.util.regex.Pattern
+
+import org.apache.commons.collections.CollectionUtils
+import org.apache.commons.collections4.map.HashedMap
+import org.apache.commons.lang.time.DateUtils
+
+import static org.apache.commons.lang.StringUtils.EMPTY as EMPTY_STRING
+import org.apache.commons.lang3.BooleanUtils
+import org.apache.commons.lang3.StringUtils
+
+import com.fpt.devops.constants.TestCaseConstants
+import com.fpt.devops.objects.SuiteTestCase
+import com.fpt.devops.objects.TestPoint
+import com.fpt.devops.objects.TestPointsQuery
+import com.fpt.devops.objects.WorkItem
+import com.kms.katalon.core.annotation.Keyword
+import com.kms.katalon.core.configuration.RunConfiguration
+import com.kms.katalon.core.testdata.TestData
+import com.kms.katalon.core.testobject.RequestObject
+import com.kms.katalon.core.testobject.TestObjectProperty
+import com.kms.katalon.core.util.internal.DateUtil
+import com.kms.katalon.core.webui.driver.DriverFactory
+
+import internal.GlobalVariable
+import static com.kms.katalon.core.testobject.ObjectRepository.findTestObject
+import com.kms.katalon.core.webservice.keyword.WSBuiltInKeywords as WS
+
+import static common.Constants.DATA_API_DATETIME_FORMAT as DATA_API_DATETIME_FORMAT
+import static common.Constants.FULL_DATETIME_FORMAT as FULL_DATETIME_FORMAT
+import static common.Constants.PATTERN_GET_VALUE_INSIDE_BRACKETS as PATTERN_GET_VALUE_INSIDE_BRACKETS
+import static common.Constants.PATTERN_SQUARE_BRACKETS_BOUND as PATTERN_SQUARE_BRACKETS_BOUND
+import static common.Constants.PATTERN_GET_AUTHORIZATION_CODE as PATTERN_GET_AUTHORIZATION_CODE
+import org.testng.Assert as Assert
+import common.MySqlServer as MySqlServer
+
+public class convertDate {
+	@Keyword
+	def static convertDateTimeFormat(def dataList, String oldFormat, String newFormat, String[] params) {
+		for (String param : params) {
+			dataList.collect({
+				it.putAt(param, convertDateTimeFormat1(it.get(param), oldFormat, newFormat))
+			})
+		}
+		return dataList
+	}
+
+
+	@Keyword
+	def static String convertDateTimeFormat1(String value, String oldDateFormat, String newDateFromat) {
+		boolean check = value.isEmpty()
+		if (!check) {
+			SimpleDateFormat sdf = new SimpleDateFormat(oldDateFormat);
+			SimpleDateFormat output = new SimpleDateFormat(newDateFromat);
+			Date d = sdf.parse(value);
+			return output.format(d);
+		}
+		return ''
+	}
+	@Keyword
+	def static convertDateTimeFormat2(def dataDB,def dataAPI, String[] params) {
+		int count =0;
+		if(null != dataAPI && dataDB != null)
+			for (String param : params) {
+				dataDB.collect({
+					String date = dataAPI.P_ClosingTime.get(count)
+					it.putAt(param, subStringdate(it.get(param), date.length()))
+					count++;
+				})
+			}
+		return dataDB;
+	}
+	@Keyword
+	def static subStringdate(String value, int leng) {
+		def date;
+		boolean check = value.isEmpty();
+		if(!check) {
+			date = value.substring(0, leng)
+			return date;
+		}
+		return '';
+	}
+	@Keyword
+	def static convertDateSubstringPBMetrics(def dataDB,def dataAPI, String[] params) {
+		int count =0;
+		if(null != dataAPI)
+			for (String param : params) {
+				dataDB.collect({
+					String date = dataAPI.PeriodEndDate.get(count)
+					it.putAt(param, subStringdate(it.get(param), date.length()))
+					count++;
+				})
+			}
+		return dataDB;
+	}
+}
